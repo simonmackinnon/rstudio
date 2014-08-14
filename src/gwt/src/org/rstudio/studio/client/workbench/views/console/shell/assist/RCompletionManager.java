@@ -553,8 +553,7 @@ public class RCompletionManager implements CompletionManager
          return false;
       }
       
-      AutoCompletionContext context =
-            getAutocompletionContext(firstLine, cursorRow, 50);
+      AutoCompletionContext context = getAutocompletionContext();
       
       // if we didn't want multi-line completion and we were forced
       // to look backwards to form context for the completion, then bail
@@ -619,9 +618,11 @@ public class RCompletionManager implements CompletionManager
       return success;
    }
    
-   private AutoCompletionContext getAutocompletionContext(String firstLine,
-         int row, int lookbackLimit)
+   private AutoCompletionContext getAutocompletionContext()
    {
+      
+      String firstLine = input_.getText();
+      int row = input_.getCursorPosition().getRow();
       
       // trim to cursor position
       firstLine = firstLine.substring(0, input_.getCursorPosition().getColumn());
