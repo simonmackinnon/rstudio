@@ -703,7 +703,14 @@ public class RCompletionManager implements CompletionManager
       
       result = StringUtil.stripBalancedQuotes(result);
       
-      Debug.logToConsole(result);
+      // Cheap trick -- convert all instances of '{', '}' to '(', ')' so
+      // they get treated as non-named function calls. This fixes an
+      // undesired behaviour whereby e.g.
+      //
+      // lapply(X, function(x) { |
+      //
+      // would produce auto-completions for lapply.
+      result = result.replace('{', '(').replace('}', ')');
       
       return new AutoCompletionContext(result, startRow < row);
    }
