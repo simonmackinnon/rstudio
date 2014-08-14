@@ -49,8 +49,12 @@ import org.rstudio.studio.client.workbench.views.console.shell.editor.InputEdito
 import org.rstudio.studio.client.workbench.views.console.shell.editor.InputEditorLineWithCursorPosition;
 import org.rstudio.studio.client.workbench.views.console.shell.editor.InputEditorSelection;
 import org.rstudio.studio.client.workbench.views.console.shell.editor.InputEditorUtil;
+import org.rstudio.studio.client.workbench.views.source.editors.text.AceEditor;
 import org.rstudio.studio.client.workbench.views.source.editors.text.DocDisplay;
 import org.rstudio.studio.client.workbench.views.source.editors.text.NavigableSourceEditor;
+import org.rstudio.studio.client.workbench.views.source.editors.text.ace.CodeModel;
+import org.rstudio.studio.client.workbench.views.source.editors.text.ace.Position;
+import org.rstudio.studio.client.workbench.views.source.editors.text.ace.TokenCursor;
 import org.rstudio.studio.client.workbench.views.source.events.CodeBrowserNavigationEvent;
 import org.rstudio.studio.client.workbench.views.source.model.RnwCompletionContext;
 import org.rstudio.studio.client.workbench.views.source.model.SourcePosition;
@@ -498,6 +502,31 @@ public class RCompletionManager implements CompletionManager
       if (flushCache)
          requester_.flushCache() ;
    }
+   
+   // Simple inner class that packages together a string (context) and
+   // bool (did we look back to build context?)
+   class AutoCompletionContext {
+      
+      public AutoCompletionContext(String context, boolean lookedBack)
+      {
+         context_ = context;
+         lookedBack_ = lookedBack;
+      }
+      
+      public String getContext()
+      {
+         return context_;
+      }
+      
+      public boolean getLookedBack()
+      {
+         return lookedBack_;
+      }
+      
+      private String context_;
+      private boolean lookedBack_;
+      
+   }
 
    /**
     * If false, the suggest operation was aborted
@@ -524,15 +553,17 @@ public class RCompletionManager implements CompletionManager
          return false;
       }
       
-      String line = getAutocompletionContext(firstLine, cursorRow, 50);
+      AutoCompletionContext context =
+            getAutocompletionContext(firstLine, cursorRow, 50);
       
       // if we didn't want multi-line completion and we were forced
       // to look backwards to form context for the completion, then bail
-      if (!tryMultiLineCompletion &&
-            !stripBalancedQuotesAndComments(firstLine).equals(line))
+      if (!tryMultiLineCompletion && context.getLookedBack())
       {
          return false;
       }
+      
+      String line = context.getContext();
       
       if (!input_.hasSelection())
       {
@@ -563,134 +594,119 @@ public class RCompletionManager implements CompletionManager
       return true ;
    }
    
-   public static String stripBalancedQuotesAndComments(String string)
+   
+   
+   private boolean findOpeningParen(TokenCursor tokenCursor)
    {
-      boolean inSingleQuotes = false;
-      boolean inDoubleQuotes = false;
-      boolean inQuotes = false;
-      
-      char currentChar = '\0';
-      char previousChar = '\0';
-      
-      StringBuilder result = new StringBuilder();
-      
-      for (int i = 0; i < string.length(); i++)
+      boolean success = false;
+      int parenCount = 0;
+      while (tokenCursor.moveToPreviousToken())
       {
-         currentChar = string.charAt(i);
-         inQuotes = inSingleQuotes || inDoubleQuotes;
-         
-         if (i > 0)
+         if (tokenCursor.currentToken().getValue() == "(")
          {
-            previousChar = string.charAt(i - 1);
+            if (parenCount == 0)
+            {
+               success = true;
+               break;
+            }
+            --parenCount;
          }
-         
-         if (currentChar == '#' && !inQuotes)
+         else if (tokenCursor.currentToken().getValue() == ")")
          {
-            break;
-         }
-         
-         if (currentChar == '\'' && !inQuotes)
-         {
-            inSingleQuotes = true;
-            continue;
-         }
-         
-         if (currentChar == '\'' && previousChar != '\\' && inSingleQuotes)
-         {
-            inSingleQuotes = false;
-            continue;
-         }
-         
-         if (currentChar == '"' && !inQuotes)
-         {
-            inDoubleQuotes = true;
-            continue;
-         }
-         
-         if (currentChar == '"' && previousChar != '\\' && inDoubleQuotes)
-         {
-            inDoubleQuotes = false;
-            continue;
-         }
-         
-         if (!inQuotes)
-         {
-            result.append(currentChar);
+            parenCount++;
          }
       }
-      
-      inQuotes = inSingleQuotes || inDoubleQuotes;
-      
-      // only strip if we ended not in a string
-      if (!inQuotes) {
-         return result.toString();
-      } else {
-         return string;
-      }
-      
-   } 
-
-   private String getAutocompletionContext(String firstLine,
+      return success;
+   }
+   
+   private AutoCompletionContext getAutocompletionContext(String firstLine,
          int row, int lookbackLimit)
    {
+      
+      // trim to cursor position
+      firstLine = firstLine.substring(0, input_.getCursorPosition().getColumn());
       
       // early escaping rules: if we're in Roxygen, or we have text immediately
       // preceding the cursor (as that signals we're completing a variable name)
       if (firstLine.matches("\\s*#+'.*") ||
           firstLine.matches(".*[a-zA-Z0-9._:$@]$"))
       {
-         return firstLine;
+         return new AutoCompletionContext(firstLine, false);
       }
       
-      String result = stripBalancedQuotesAndComments(firstLine);
-      String currentLine = result;
-      
-      // keep track of the balance of '{', '}' so we can skip over
-      // blocks if necessary
-      int braceBalance = StringUtil.countMatches(currentLine, "{") -
-            StringUtil.countMatches(currentLine, "}");
-      
-      // when we have counted more '(' than ')', we can break
-      int parenBalance = StringUtil.countMatches(currentLine, "(") -
-            StringUtil.countMatches(currentLine, ")");
-      
-      if (parenBalance > 0)
+      // if the line is currently within a comment, bail -- this ensures
+      // that we can auto-complete within a comment line (but we only
+      // need context from that line)
+      if (!firstLine.equals(StringUtil.stripRComment(firstLine)))
       {
-         return result;
+         return new AutoCompletionContext(firstLine, false);
       }
       
-      for (int i = 0; i < lookbackLimit; i++)
+      // if we're within a string, bail
+      if (!firstLine.equals(StringUtil.stripBalancedQuotes(firstLine)))
       {
-         row--;
-         if (row < 0)
-         {
-            break;
-         }
-         
-         currentLine = stripBalancedQuotesAndComments(
-               docDisplay_.getLine(row));
-         
-         result = currentLine + result;
-         
-         braceBalance += StringUtil.countMatches(currentLine, "{") -
-               StringUtil.countMatches(currentLine, "}");
-         parenBalance += StringUtil.countMatches(currentLine, "(") -
-               StringUtil.countMatches(currentLine, ")");
-         
-         if (braceBalance < 0)
-         {
-            continue;
-         }
-         
-         if (parenBalance > 0)
-         {
-            break;
-         }
-         
+         return new AutoCompletionContext(firstLine, false);
       }
-      return result;
-   }
+      
+      // access to the R Code model
+      // TODO: Don't force reliance on Ace
+      AceEditor editor = (AceEditor)docDisplay_;
+      CodeModel codeModel = editor.getSession().getMode().getCodeModel();
+      codeModel.tokenizeUpToRow(row);
+      
+      // Make a token cursor and put it at the end of the line
+      TokenCursor tokenCursor = codeModel.getTokenCursor();
+      
+      // Seeking to the next token can throw an exception if we're at the
+      // end of the document -- if we get an exception, just auto-complete
+      // on the starting line
+      try {
+         tokenCursor.seekToNearestToken(
+               Position.create(row, firstLine.length()),
+               row + 50);
+      } catch (Exception e) {
+         return new AutoCompletionContext(firstLine, false);
+      }
+      
+      boolean firstMove = tokenCursor.moveToPreviousToken();
+      
+      if (!firstMove)
+      {
+         return new AutoCompletionContext(firstLine, false);
+      }
 
+      // Walk tokens backwards until we have one more '(' than we do
+      // ')' with an empty 'block' token stack -- but only if we didn't
+      // already hit a '(' as the first token
+      if (tokenCursor.currentToken().getValue() != "(")
+      {
+         boolean success = findOpeningParen(tokenCursor);
+         if (!success)
+         {
+            return new AutoCompletionContext(firstLine, false);
+         }
+      }
+      
+      // Take the inferred row up to current position and return
+      int startRow = tokenCursor.currentPosition().getRow();
+      
+      StringBuilder resultBuilder = new StringBuilder();
+      for (int i = startRow; i < row; i++)
+      {
+         resultBuilder.append(StringUtil.stripRComment(docDisplay_.getLine(i)));
+      }
+      resultBuilder.append(firstLine.substring(0,
+                  input_.getCursorPosition().getColumn()));
+            
+      String result = resultBuilder.toString();
+      
+      result = StringUtil.stripBalancedQuotes(result);
+      
+      Debug.logToConsole(result);
+      
+      return new AutoCompletionContext(result, startRow < row);
+   }
+   
    /**
     * It's important that we create a new instance of this each time.
     * It maintains state that is associated with a completion request.
