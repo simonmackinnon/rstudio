@@ -165,7 +165,7 @@ public class RCompletionManager implements CompletionManager
    public void codeCompletion()
    {
       if (initFilter_ == null || initFilter_.shouldComplete(null))
-         beginSuggest(true, false, false);
+         beginSuggest(true, false);
    }
    
    public void goToHelp()
@@ -267,21 +267,19 @@ public class RCompletionManager implements CompletionManager
        * [identifier] - narrow suggestions--or if we're lame, just dismiss
        * All others - dismiss popup
        */
+      
+      nativeEvent_ = event;
 
       int modifier = KeyboardShortcut.getModifierValue(event);
 
       if (!popup_.isShowing())
       {
-         boolean isTab = event.getKeyCode() == KeyCodes.KEY_TAB &&
-               modifier == KeyboardShortcut.NONE;
-         boolean isCtrlSpace = event.getKeyCode() == KeyCodes.KEY_SPACE &&
-               modifier == KeyboardShortcut.CTRL;
-               
-         if (isTab || isCtrlSpace)
+         if ((event.getKeyCode() == KeyCodes.KEY_TAB && modifier == KeyboardShortcut.NONE) ||
+             (event.getKeyCode() == KeyCodes.KEY_SPACE && modifier == KeyboardShortcut.CTRL))
          {
             if (initFilter_ == null || initFilter_.shouldComplete(event))
             {
-               return beginSuggest(true, false, isCtrlSpace) ;
+               return beginSuggest(true, false);
             }
          }
          else if (event.getKeyCode() == 112 // F1
@@ -377,7 +375,7 @@ public class RCompletionManager implements CompletionManager
                @Override
                public void execute()
                {
-                  beginSuggest(false, false, false) ;
+                  beginSuggest(false, false);
                }
             });
          }
@@ -391,7 +389,7 @@ public class RCompletionManager implements CompletionManager
                @Override
                public void execute()
                {
-                  beginSuggest(true, true, false) ;
+                  beginSuggest(true, true);
                }
             });
          }
@@ -531,8 +529,7 @@ public class RCompletionManager implements CompletionManager
    /**
     * If false, the suggest operation was aborted
     */
-   private boolean beginSuggest(boolean flushCache, boolean implicit,
-         boolean tryMultiLineCompletion)
+   private boolean beginSuggest(boolean flushCache, boolean implicit)
    {
       if (!input_.isSelectionCollapsed())
          return false ;
@@ -544,7 +541,6 @@ public class RCompletionManager implements CompletionManager
          return false;
       
       int cursorCol = selection.getStart().getPosition();
-      int cursorRow = input_.getCursorPosition().getRow();
       String firstLine = input_.getText().substring(0, cursorCol);
       
       // don't auto-complete at the start of comments
@@ -553,16 +549,17 @@ public class RCompletionManager implements CompletionManager
          return false;
       }
       
+      // don't auto-complete with tab on lines with only whitespace,
+      // if the insertion character was a tab
+      if (nativeEvent_ != null &&
+            nativeEvent_.getKeyCode() == KeyCodes.KEY_TAB)
+         if (firstLine.matches("^\\s*$"))
+            return false;
+      
       AutoCompletionContext context = getAutocompletionContext();
       
-      // if we didn't want multi-line completion and we were forced
-      // to look backwards to form context for the completion, then bail
-      if (!tryMultiLineCompletion && context.getLookedBack())
-      {
-         return false;
-      }
-      
       String line = context.getContext();
+      Debug.logToConsole(line);
       
       if (!input_.hasSelection())
       {
@@ -765,9 +762,15 @@ public class RCompletionManager implements CompletionManager
          
          if (results.length == 0)
          {
-            popup_.showErrorMessage(
-                  "(No matches)", 
-                  new PopupPositioner(input_.getCursorBounds(), popup_)) ;
+            if (nativeEvent_ != null && nativeEvent_.getKeyCode() != KeyCodes.KEY_TAB) {
+               popup_.showErrorMessage(
+                     "(No matches)", 
+                     new PopupPositioner(input_.getCursorBounds(), popup_));
+            }
+            else
+            {
+               docDisplay_.insertCode("\t");
+            }
             return ;
          }
 
@@ -848,7 +851,7 @@ public class RCompletionManager implements CompletionManager
                @Override
                public void execute()
                {
-                  beginSuggest(true, true, false);
+                  beginSuggest(true, true);
                }
             });
          }
@@ -931,4 +934,6 @@ public class RCompletionManager implements CompletionManager
    private final Invalidation invalidation_ = new Invalidation();
    private CompletionRequestContext context_ ;
    private final RnwCompletionContext rnwContext_;
+   
+   private NativeEvent nativeEvent_;
 }
