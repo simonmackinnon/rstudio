@@ -535,10 +535,10 @@ public class Shell implements ConsoleInputHandler,
                }
             }
             else if (
-                  BrowseCap.hasMetaKey() && 
-                  (mod == (KeyboardShortcut.META + KeyboardShortcut.SHIFT)) ||
-                  !BrowseCap.hasMetaKey() && 
-                  (mod == (KeyboardShortcut.CTRL + KeyboardShortcut.SHIFT)))
+                  (BrowseCap.hasMetaKey() && 
+                   (mod == (KeyboardShortcut.META + KeyboardShortcut.SHIFT))) ||
+                  (!BrowseCap.hasMetaKey() && 
+                   (mod == (KeyboardShortcut.CTRL + KeyboardShortcut.SHIFT))))
             {
                switch (keyCode)
                {
