@@ -116,9 +116,11 @@ import org.rstudio.studio.client.workbench.views.source.editors.text.DocDisplay.
 import org.rstudio.studio.client.workbench.views.source.editors.text.ScopeList.ContainsFoldPredicate;
 import org.rstudio.studio.client.workbench.views.source.editors.text.TextEditingTargetRMarkdownHelper.RmdSelectedTemplate;
 import org.rstudio.studio.client.workbench.views.source.editors.text.ace.AceFold;
+import org.rstudio.studio.client.workbench.views.source.editors.text.ace.CodeModel;
 import org.rstudio.studio.client.workbench.views.source.editors.text.ace.Mode.InsertChunkInfo;
 import org.rstudio.studio.client.workbench.views.source.editors.text.ace.Position;
 import org.rstudio.studio.client.workbench.views.source.editors.text.ace.Range;
+import org.rstudio.studio.client.workbench.views.source.editors.text.ace.TokenCursor;
 import org.rstudio.studio.client.workbench.views.source.editors.text.events.*;
 import org.rstudio.studio.client.workbench.views.source.editors.text.status.StatusBar;
 import org.rstudio.studio.client.workbench.views.source.editors.text.status.StatusBarPopupMenu;
@@ -3876,6 +3878,139 @@ public class TextEditingTarget implements
       {
          docDisplay_.unfoldAll();
       }
+   }
+
+   @Handler
+   void onInsertRoxygenSkeleton()
+   {
+      Debug.logToConsole("Hi!");
+
+      // Get the subset of text parsable as the function declaration
+      int row = docDisplay_.getCursorPosition().getRow();
+      String line = docDisplay_.getLine(row);
+
+      // If the current line doesn't appear to have the function decl,
+      // move down a row just in case it's of the form:
+      // f <-
+      //   function(...)
+      if (!line.matches(".*function"))
+      {
+         row++;
+         line = docDisplay_.getLine(row);
+      }
+
+      // look back from the cursor position until we find a function
+      // declaration
+      while (!line.matches(".*function.*") && row >= 0)
+      {
+         row--;
+         line = docDisplay_.getLine(row);
+      }
+
+      // bail if we looked all the way back and found nothing
+      if (row < 0)
+      {
+         return;
+      }
+
+      Position startPos = Position.create(row, line.indexOf("function"));
+      Debug.logObject(startPos);
+
+      // Get the Ace Editor
+      AceEditor editor = (AceEditor) docDisplay_;
+      
+      // Get the code model
+      CodeModel codeModel = editor.getSession().getMode().getCodeModel();
+      
+      // Generate a token cursor
+      TokenCursor cursor = codeModel.getTokenCursor();
+      cursor.seekToNearestToken(startPos, row);
+
+      Debug.logToConsole(cursor.currentToken().getValue());
+      Debug.logToConsole(cursor.currentToken().getType());
+
+      // Get the opening '(' associated with the function declaration
+      if (cursor.currentToken().getValue() != "(")
+      {
+         while (cursor.moveToNextToken())
+         {
+            if (cursor.currentToken().getValue() == "(")
+            {
+               break;
+            }
+         }
+      }
+
+      Debug.logToConsole("Cursor after seeking forward:");
+      Debug.logObject(cursor);
+      Debug.logObject(cursor.currentToken());
+
+      // Move token cursor to matching ')'
+      cursor.moveToMatchingToken(row + 100);
+
+      Debug.logToConsole("Cursor after finding matching token:");
+      Debug.logObject(cursor);
+
+      Position endPos = cursor.currentPosition();
+
+      Debug.logObject(endPos);
+
+      // Construct line used for skeleton generation
+      StringBuilder b = new StringBuilder();
+
+      // Special-case when startPos == endPos
+      if (startPos.getRow() == endPos.getRow())
+      {
+         b.append(docDisplay_.getLine(startPos.getRow()).substring(
+               startPos.getColumn(), endPos.getColumn() + 1));
+      }
+      else
+      {
+         b.append(docDisplay_.getLine(startPos.getRow()).substring(startPos.getColumn()));
+         for (int i = startPos.getRow() + 1; i < endPos.getRow(); i++)
+         {
+            b.append(docDisplay_.getLine(i));
+         }
+         b.append(docDisplay_.getLine(endPos.getRow())
+               .substring(0, endPos.getColumn() + 1));
+      }
+      
+      // Make it parsable as an empty function declaration
+      b.append(" {}");
+      
+      String result = b.toString();
+      Debug.logToConsole(result);
+      
+      final SourcePosition insertPos = SourcePosition.create(
+            startPos.getRow(), 0);
+
+      // Callback to R to parse the function argument names
+      server_.parseFunctionArgNames(result, new ServerRequestCallback<JsArrayString>()
+      {
+         
+         @Override
+         public void onResponseReceived(JsArrayString args)
+         {
+            if (args.length() > 0)
+            {
+               StringBuilder b = new StringBuilder();
+               for (int i = 0; i < args.length(); i++)
+               {
+                  b.append("#' @param " + args.get(i) + " \n");
+               }
+               String roxygen = b.toString();
+               docDisplay_.navigateToPosition(insertPos, false);
+               docDisplay_.insertCode(roxygen);
+            }
+         }
+
+         @Override
+         public void onError(ServerError error)
+         {
+            // TODO Auto-generated method stub
+            
+         }
+      });
    }
    
    boolean useScopeTreeFolding()

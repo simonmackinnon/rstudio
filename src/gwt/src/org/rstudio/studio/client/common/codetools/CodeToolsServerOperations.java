@@ -18,6 +18,8 @@ import org.rstudio.studio.client.server.*;
 import org.rstudio.studio.client.workbench.codesearch.model.CodeSearchServerOperations;
 import org.rstudio.studio.client.workbench.views.help.model.HelpServerOperations;
 
+import com.google.gwt.core.client.JsArrayString;
+
 public interface CodeToolsServerOperations extends HelpServerOperations,
                                                    CodeSearchServerOperations
 {
@@ -27,4 +29,7 @@ public interface CodeToolsServerOperations extends HelpServerOperations,
    void getHelpAtCursor(
          String line, int cursorPos,
          ServerRequestCallback<org.rstudio.studio.client.server.Void> callback);
+   
+   void parseFunctionArgNames(String line,
+         ServerRequestCallback<JsArrayString> callback);
 }

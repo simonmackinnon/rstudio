@@ -543,6 +543,15 @@ public class RemoteServer implements Server
                   requestCallback) ;
    }
    
+   public void parseFunctionArgNames(String line,
+         ServerRequestCallback<JsArrayString> requestCallback)
+   {
+      sendRequest(RPC_SCOPE,
+            PARSE_FUNCTION_ARG_NAMES,
+            line,
+            requestCallback);
+   }
+   
    public void removeAllObjects(boolean includeHidden,
                                 ServerRequestCallback<Void> requestCallback)
    {
@@ -3651,6 +3660,7 @@ public class RemoteServer implements Server
    private static final String ABORT = "abort";
    private static final String GET_COMPLETIONS = "get_completions";
    private static final String GET_HELP_AT_CURSOR = "get_help_at_cursor";
+   private static final String PARSE_FUNCTION_ARG_NAMES = "parse_function_arg_names";
 
    private static final String PROCESS_START = "process_start";
    private static final String PROCESS_INTERRUPT = "process_interrupt";

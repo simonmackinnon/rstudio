@@ -147,6 +147,55 @@ var RCodeModel = function(doc, tokenizer, statePattern, codeBeginPattern) {
          return null;
       };
 
+   this.$complements = {
+      '(': ')',
+      ')': '(',
+      '[': ']',
+      ']': '[',
+      '{': '}',
+      '}': '{'
+   };
+      
+
+ this.moveToMatchingToken = function(maxRow)
+ {
+    var tokenVal = this.currentValue();
+    var complVal = this.$complements[tokenVal];
+
+    var balance = 0;
+    var thisVal = null;
+    
+    var countedTokens = 0;
+    var maxTokens = 100;
+    while (this.moveToNextToken(maxRow))
+    {
+       var thisVal = this.currentValue();
+       if (thisVal == tokenVal)
+       {
+          balance++;
+       }
+
+       if (thisVal == complVal)
+       {
+          balance--;
+       }
+
+       if (balance < 0)
+       {
+          break;
+       }
+
+       countedTokens = countedTokens + 1;
+       if (countedTokens > maxTokens)
+       {
+          break;
+       }
+    }
+    return thisVal === complVal;
+ };
+
+      
+
       this.currentToken = function()
       {
          return (that.$tokens[this.$row] || [])[this.$offset];

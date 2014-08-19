@@ -98,6 +98,7 @@ public abstract class
    public abstract AppCommand setWorkingDirToActiveDoc();
    public abstract AppCommand codeCompletion();
    public abstract AppCommand editRmdFormatOptions();
+   public abstract AppCommand insertRoxygenSkeleton();
  
    // Projects
    public abstract AppCommand newProject();

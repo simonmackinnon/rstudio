@@ -397,6 +397,7 @@ well as menu structures (for main menu and popup menus).
          <shortcut refid="foldAll" value="Cmd+Alt+O" if="org.rstudio.core.client.BrowseCap.isMacintosh()" title="Collapse All Folds"/>
          <shortcut refid="unfoldAll" value="Shift+Alt+O" if="!org.rstudio.core.client.BrowseCap.isMacintosh()" title="Expand All Folds"/>
          <shortcut refid="unfoldAll" value="Cmd+Shift+Alt+O" if="org.rstudio.core.client.BrowseCap.isMacintosh()" title="Expand All Folds"/>  
+         <shortcut refid="insertRoxygenSkeleton" value="Alt+Shift+B" title="Insert Roxygen Skeleton" />
          <shortcut value="Ctrl+K" title="Delete to Line End" if="org.rstudio.core.client.BrowseCap.isMacintosh()" />
          <shortcut value="Alt+Up" title="Move Lines Up" />
          <shortcut value="Alt+Down" title="Move Lines Down" />

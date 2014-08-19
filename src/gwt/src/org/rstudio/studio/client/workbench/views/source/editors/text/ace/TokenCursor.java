@@ -52,5 +52,9 @@ public class TokenCursor extends JavaScriptObject
       return !! this.moveBackwardOverMatchingParens();
    }-*/;
    
+   public native final boolean moveToMatchingToken(int maxRow) /*-{
+      return !! this.moveToMatchingToken(maxRow);
+   }-*/;
+   
 }
 

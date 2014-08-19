@@ -249,3 +249,27 @@ utils:::rc.settings(files=T)
    else
       print(help(pieces[1], help_type='html', try.all.packages=T))
 })
+
+.rs.addJsonRpcHandler("parse_function_arg_names", function(line) {
+
+  ## Leverage the R parser
+  result <- tryCatch(
+    expr = parse(text = line),
+    error = function(e) return(character())
+  )
+
+  if (!length(result)) return(character())
+
+  ## Presumedly, this should be parsed as an expression
+  if (!is.expression(result)) {
+    return(character())
+  }
+
+  call <- result[[1]]
+  if (as.character(call[[1]]) != "function") {
+    return(character())
+  }
+  args <- call[[2]]
+  return(names(args))
+
+})
